@@ -2,6 +2,7 @@ const std = @import("std");
 
 const Image = @import("Image.zig");
 const crc = @import("crc.zig");
+const adler = @import("adler32.zig");
 
 pub const Options = struct {};
 
@@ -61,9 +62,20 @@ fn writeData(writer: anytype, img: Image) !void {
     var counting_writer = std.io.countingWriter(crc_wr);
     var counting_wr = counting_writer.writer();
 
+    const cmf = 0x87; // 8 = deflate, 7 = log(window size (see std.compress.deflate)) - 8
+     
+    var flg: u8 = 0b11000000;
+    const rem: usize = (@intCast(usize, cmf) * 256) + flg % 31;
+    flg += 31 - @truncate(u8, rem);
+
+    try counting_wr.writeIntBig(u8, cmf);
+    try counting_wr.writeIntBig(u8, flg);
+
     var compressor = try std.compress.deflate.compressor(alloc, counting_wr, .{});
-    try filter(img, .{ .Specified = .None }, &compressor);
+    const checksum = try filter(img, .{ .Specified = .None }, &compressor);
     try compressor.flush();
+
+    try counting_wr.writeIntBig(u32, checksum);
 
     const size = @truncate(u32, buffer.items.len - 4);
 
@@ -104,10 +116,11 @@ const FilterChoice = union(FilterChoiceStrategies) {
     Specified: FilterType,
 };
 
-fn filter(img: Image, filter_choice: FilterChoice, compressor: anytype) !void {
+fn filter(img: Image, filter_choice: FilterChoice, compressor: anytype) !u32 {
     var linebuf = std.ArrayList(u8).init(compressor.allocator);
     defer linebuf.deinit();
-    var wr = linebuf.writer();
+    var adler_writer = adler.writer(linebuf.writer());
+    var wr = adler_writer.writer();
     
     var y: usize = 0;
     while (y < img.height) : (y += 1) {
@@ -134,5 +147,6 @@ fn filter(img: Image, filter_choice: FilterChoice, compressor: anytype) !void {
 
         _ = try compressor.write(linebuf.items);
     }
+    return adler_writer.adler;
 }
 
