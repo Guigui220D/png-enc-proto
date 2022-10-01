@@ -62,7 +62,7 @@ fn writeData(writer: anytype, img: Image) !void {
     var counting_writer = std.io.countingWriter(crc_wr);
     var counting_wr = counting_writer.writer();
 
-    const cmf = 0x87; // 8 = deflate, 7 = log(window size (see std.compress.deflate)) - 8
+    const cmf = 0x78; // 8 = deflate, 7 = log(window size (see std.compress.deflate)) - 8
      
     var flg: u8 = 0b11000000;
     const rem: usize = (@intCast(usize, cmf) * 256) + flg % 31;

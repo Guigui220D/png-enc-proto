@@ -11,6 +11,8 @@ pub fn main() !void {
     defer img.destroy(alloc);
 
     img.setPixel(1, 1, 0xff00ffff) catch unreachable;
+    img.setPixel(0, 1, 0xff000000) catch unreachable;
+    img.setPixel(1, 0, 0x00ff00ff) catch unreachable;
 
     var cwd = std.fs.cwd();
     var file = try cwd.createFile("out.png", .{});
@@ -31,4 +33,5 @@ pub fn main() !void {
 test {
     std.testing.refAllDecls(@import("crc.zig"));
     std.testing.refAllDecls(@import("adler32.zig"));
+    std.testing.refAllDecls(@import("zlib_compressor.zig"));
 }
