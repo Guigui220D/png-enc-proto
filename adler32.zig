@@ -31,7 +31,26 @@ pub fn Adler32Writer(comptime WriterType: type) type {
     };
 }
 
-// TODO: rename to crcWriter
+// TODO: rename to adler32writer
 pub fn writer(underlying_stream: anytype) Adler32Writer(@TypeOf(underlying_stream)) {
     return .{ .raw_writer = underlying_stream };
+}
+
+test "adler32" {
+    var buf = std.BoundedArray(u8, 512).init(0) catch unreachable;
+    var adl_writer = writer(buf.writer());
+    var adl_wr = adl_writer.writer();
+
+    var fifo = std.fifo.LinearFifo(u8, .{ .Static = 512 }).init();
+    try fifo.write("\x63\xF8\xFF\xFF\x3F\x00");
+
+    var decomp = try std.compress.deflate.decompressor(std.heap.page_allocator, fifo.reader(), null);
+
+    var buf2: [512]u8 = undefined;
+    var read = try decomp.read(&buf2);
+
+    // Taken from a valid png file I have
+    try adl_wr.writeAll(buf2[0..read]);
+
+    try std.testing.expectEqual(@as(u32, 0x05FE02FE), adl_writer.adler);
 }

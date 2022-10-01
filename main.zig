@@ -30,4 +30,5 @@ pub fn main() !void {
 
 test {
     std.testing.refAllDecls(@import("crc.zig"));
+    std.testing.refAllDecls(@import("adler32.zig"));
 }
