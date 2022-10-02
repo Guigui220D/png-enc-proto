@@ -90,11 +90,11 @@ fn writeTrailer(writer: anytype) !void {
 }
 
 const FilterType = enum(u8) {
-    None,
-    Sub,
-    Up,
-    Average,
-    Paeth,
+    None = 0,
+    Sub = 1,
+    Up = 2,
+    Average = 3,
+    Paeth = 4,
 };
 
 const FilterChoiceStrategies = enum {

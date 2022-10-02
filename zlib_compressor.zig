@@ -7,8 +7,9 @@ const defl = std.compress.deflate;
 pub fn ZlibCompressor(comptime WriterType: type) type {
     return struct {
         raw_writer: WriterType,
-        adler32_writer: adler32.Adler32Writer(WriterType),
-        compressor: defl.Compressor(adler32.Adler32Writer(WriterType).Writer),
+        compressor: defl.Compressor(WriterType),
+        adler32_writer: adler32.Adler32Writer(defl.Compressor(WriterType).Writer),
+        
 
         const Self = @This();
 
@@ -17,8 +18,8 @@ pub fn ZlibCompressor(comptime WriterType: type) type {
         /// This is made this way because not doing it in place segfaults for a reason
         pub fn init(self: *Self, alloc: std.mem.Allocator, stream: WriterType) !void {
             self.raw_writer = stream;
-            self.adler32_writer = adler32.writer(self.raw_writer);
-            self.compressor = try defl.compressor(alloc, self.adler32_writer.writer(), .{});
+            self.compressor = try defl.compressor(alloc, self.raw_writer, .{});
+            self.adler32_writer = adler32.writer(self.compressor.writer());
         }
 
         /// Begins a zlib block with the header
@@ -26,11 +27,13 @@ pub fn ZlibCompressor(comptime WriterType: type) type {
             // TODO: customize
             const cmf = 0x78; // 8 = deflate, 7 = log(window size (see std.compress.deflate)) - 8
             const flg = blk: {
-                var ret: u8 = 0b11000000; // 11 = max compression
-                const rem: usize = (@intCast(usize, cmf) * 256) + ret % 31;
+                var ret: u8 = 0b10000000; // 11 = max compression
+                const rem: u8 = @truncate(u8, ((@intCast(usize, cmf) << 8) + ret) % 31);
                 ret += 31 - @truncate(u8, rem);
                 break :blk ret;
             };
+
+            //std.debug.assert(((@intCast(usize, cmf) << 8) + flg) % 31 == 0);
             // write the header
             var wr = self.raw_writer;
             try wr.writeByte(cmf);
