@@ -37,26 +37,6 @@ pub fn main() !void {
     std.debug.print("Wrote {} bytes, saved.\n", .{written});
 }
 
-test "test" {
-    var fifo = std.fifo.LinearFifo(u8, .{ .Static = 512 }).init();
-    try fifo.write("\x78\x9C\x62\xF8\xFF\x9F\xE1\x3F\x00\x00\x00\xFF\xFF\x26\x7E\x06\x27");
-
-    var zlib = try std.compress.zlib.zlibStream(std.heap.page_allocator, fifo.reader());
-    var buf2: [512]u8 = undefined;
-    var read = try zlib.read(&buf2);
-
-    var buf = std.BoundedArray(u8, 512).init(0) catch unreachable;
-    var adl_writer = @import("adler32.zig").writer(buf.writer());
-    var adl_wr = adl_writer.writer();
-
-    try adl_wr.writeAll(buf2[0..read]);
-
-    std.debug.print("{any}\n", .{buf2[0..read]});
-    std.debug.print("{x:0>8}\n", .{adl_writer.adler});
-
-    try std.testing.expectEqual(@as(u32, 0x267E0627), adl_writer.adler);
-}
-
 test {
     std.testing.refAllDecls(@import("crc.zig"));
     std.testing.refAllDecls(@import("adler32.zig"));

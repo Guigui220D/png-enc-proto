@@ -60,19 +60,28 @@ test "zlib compressor" {
     var gpa: std.heap.GeneralPurposeAllocator(.{}) = .{};
     const alloc = gpa.allocator();
 
-    var list = std.ArrayList(u8).init(alloc);
+    {
+        var fifo = std.fifo.LinearFifo(u8, .Dynamic).init(alloc);
+        defer fifo.deinit();
 
-    //var zlib = try zlibCompressor(alloc, list.writer());
-    var zlib: ZlibCompressor(@TypeOf(list.writer())) = undefined;
-    try zlib.init(alloc, list.writer());
+        var comp: ZlibCompressor(@TypeOf(fifo.writer())) = undefined;
+        try comp.init(alloc, fifo.writer());
 
-    try zlib.begin();
-    try zlib.writer().writeAll("\x63\xF8\xFF\xFF\x3F\x00");
-    try zlib.end();
+        const content = "hey abcdef aaaaaa abcdef";
 
-    // TODO: test zlib compressor
+        try comp.begin();
+        try comp.writer().writeAll(content);
+        try comp.end();
 
-    list.deinit();
+        var decomp = try std.compress.zlib.zlibStream(alloc, fifo.reader());
+        defer decomp.deinit();
+
+        var out: [512]u8 = undefined;
+
+        const size = try decomp.read(&out);
+
+        try std.testing.expectEqualSlices(u8, content, out[0..size]);
+    }
 
     const leaks = gpa.deinit();
     try std.testing.expect(!leaks);
