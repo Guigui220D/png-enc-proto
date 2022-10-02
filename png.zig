@@ -4,9 +4,10 @@ const Image = @import("Image.zig");
 const crc = @import("crc.zig");
 const ZlibCompressor = @import("zlib_compressor.zig").ZlibCompressor;
 
+// TODO: encoder options
 pub const Options = struct {};
 
-pub fn encode(image: Image, writer: anytype, options: Options) !u64 {
+pub fn encode(writer: anytype, alloc: std.mem.Allocator, image: Image, options: Options) !u64 {
     _ = options;
 
     var counting_writer = std.io.countingWriter(writer);
@@ -14,7 +15,7 @@ pub fn encode(image: Image, writer: anytype, options: Options) !u64 {
 
     try writeSignature(wr);
     try writeHeader(wr, image.width, image.height);
-    try writeData(wr, image);
+    try writeData(wr, alloc, image);
     try writeTrailer(wr);
 
     return counting_writer.bytes_written;
@@ -46,9 +47,7 @@ fn writeHeader(writer: anytype, width: usize, height: usize) !void {
 }
 
 /// Write the IDAT chunk
-fn writeData(writer: anytype, img: Image) !void {
-    const alloc = std.heap.page_allocator;
-    // TODO: this shouldn't use an allocator
+fn writeData(writer: anytype, alloc: std.mem.Allocator, img: Image) !void {
     // TODO: think about a chunking IDAT writer (kinda like BufferedWriter)
     // TODO: fix this ugly writer stacking
     var buffer = std.ArrayList(u8).init(alloc);

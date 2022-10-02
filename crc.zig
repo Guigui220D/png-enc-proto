@@ -1,6 +1,8 @@
 const std = @import("std");
 const io = std.io;
 
+const crc = @This();
+
 var crc_table: ?[256]u32 = null;
 
 fn make_crc_table() void {
@@ -55,14 +57,13 @@ pub fn CrcWriter(comptime WriterType: type) type {
     };
 }
 
-// TODO: rename to crcWriter
 pub fn writer(underlying_stream: anytype) CrcWriter(@TypeOf(underlying_stream)) {
     return .{ .raw_writer = underlying_stream };
 }
 
 test "crc" {
     var buf = std.BoundedArray(u8, 512).init(0) catch unreachable;
-    var crc_writer = writer(buf.writer());
+    var crc_writer = crc.writer(buf.writer());
     var crc_wr = crc_writer.writer();
 
     // Taken from a valid png file I have

@@ -31,10 +31,12 @@ pub fn main() !void {
 
     std.debug.print("Starting encoding to {s}...\n", .{"out.png"});
 
-    const written = try png.encode(img, wr, .{});
+    const written = try png.encode(wr, alloc, img, .{});
     try buffered_writer.flush();
 
     std.debug.print("Wrote {} bytes, saved.\n", .{written});
+
+    // TODO: figure out why the file doesn't render in the browser
 }
 
 test {

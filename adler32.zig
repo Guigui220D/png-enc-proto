@@ -1,6 +1,8 @@
 const std = @import("std");
 const io = std.io;
 
+const adler32 = @This();
+
 pub fn Adler32Writer(comptime WriterType: type) type {
     return struct {
         raw_writer: WriterType,
@@ -31,14 +33,13 @@ pub fn Adler32Writer(comptime WriterType: type) type {
     };
 }
 
-// TODO: rename to adler32writer
 pub fn writer(underlying_stream: anytype) Adler32Writer(@TypeOf(underlying_stream)) {
     return .{ .raw_writer = underlying_stream };
 }
 
 test "adler32" {
     var buf = std.BoundedArray(u8, 512).init(0) catch unreachable;
-    var adl_writer = writer(buf.writer());
+    var adl_writer = adler32.writer(buf.writer());
     var adl_wr = adl_writer.writer();
 
     var fifo = std.fifo.LinearFifo(u8, .{ .Static = 512 }).init();
