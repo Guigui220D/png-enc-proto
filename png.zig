@@ -2,7 +2,7 @@ const std = @import("std");
 
 const Image = @import("Image.zig");
 const crc = @import("crc.zig");
-const adler = @import("adler32.zig");
+const ZlibCompressor = @import("zlib_compressor.zig").ZlibCompressor;
 
 pub const Options = struct {};
 
@@ -62,20 +62,13 @@ fn writeData(writer: anytype, img: Image) !void {
     var counting_writer = std.io.countingWriter(crc_wr);
     var counting_wr = counting_writer.writer();
 
-    const cmf = 0x78; // 8 = deflate, 7 = log(window size (see std.compress.deflate)) - 8
-     
-    var flg: u8 = 0b11000000;
-    const rem: usize = (@intCast(usize, cmf) * 256) + flg % 31;
-    flg += 31 - @truncate(u8, rem);
+    var zlib: ZlibCompressor(@TypeOf(counting_wr)) = undefined;
+    try zlib.init(alloc, counting_wr);
 
-    try counting_wr.writeIntBig(u8, cmf);
-    try counting_wr.writeIntBig(u8, flg);
-
-    var compressor = try std.compress.deflate.compressor(alloc, counting_wr, .{});
-    const checksum = try filter(img, .{ .Specified = .None }, &compressor);
-    try compressor.flush();
-
-    try counting_wr.writeIntBig(u32, checksum);
+    // Zlib frame
+    try zlib.begin();
+    try filter(img, .{ .Specified = .None }, zlib.writer());
+    try zlib.end();
 
     const size = @truncate(u32, buffer.items.len - 4);
 
@@ -116,12 +109,7 @@ const FilterChoice = union(FilterChoiceStrategies) {
     Specified: FilterType,
 };
 
-fn filter(img: Image, filter_choice: FilterChoice, compressor: anytype) !u32 {
-    var linebuf = std.ArrayList(u8).init(compressor.allocator);
-    defer linebuf.deinit();
-    var adler_writer = adler.writer(linebuf.writer());
-    var wr = adler_writer.writer();
-    
+fn filter(img: Image, filter_choice: FilterChoice, writer: anytype) !void {    
     var y: usize = 0;
     while (y < img.height) : (y += 1) {
         const filter_type: FilterType = switch (filter_choice) {
@@ -130,23 +118,18 @@ fn filter(img: Image, filter_choice: FilterChoice, compressor: anytype) !u32 {
             .Specified => |f| f,
         };
 
-        linebuf.clearRetainingCapacity();
-
-        try wr.writeIntBig(u8, @enumToInt(filter_type));
+        try writer.writeIntBig(u8, @enumToInt(filter_type));
 
         switch (filter_type) {
             .None => {
                 // Just copy the line
-                try wr.writeAll(std.mem.sliceAsBytes(img.pixels[(y * img.width)..((y + 1) * img.width)]));
+                try writer.writeAll(std.mem.sliceAsBytes(img.pixels[(y * img.width)..((y + 1) * img.width)]));
             },
             .Sub,
             .Up,
             .Average,
             .Paeth => @panic("Unimplemented (TODO)"), // TODO: filters
         }
-
-        _ = try compressor.write(linebuf.items);
     }
-    return adler_writer.adler;
 }
 

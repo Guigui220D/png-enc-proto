@@ -12,6 +12,15 @@ pub fn ZlibCompressor(comptime WriterType: type) type {
 
         const Self = @This();
 
+        // TODO: find why doing it an other way segfaults
+        /// Inits a zlibcompressor
+        /// This is made this way because not doing it in place segfaults for a reason
+        pub fn init(self: *Self, alloc: std.mem.Allocator, stream: WriterType) !void {
+            self.raw_writer = stream;
+            self.adler32_writer = adler32.writer(self.raw_writer);
+            self.compressor = try defl.compressor(alloc, self.adler32_writer.writer(), .{});
+        }
+
         /// Begins a zlib block with the header
         pub fn begin(self: *Self) !void {
             // TODO: customize
@@ -36,6 +45,7 @@ pub fn ZlibCompressor(comptime WriterType: type) type {
         /// Ends a zlib block with the checksum
         pub fn end(self: *Self) !void {
             try self.compressor.flush();
+            self.compressor.deinit();
             // Write the checksum
             var wr = self.raw_writer;
             try wr.writeIntBig(u32, self.adler32_writer.adler);
@@ -43,24 +53,15 @@ pub fn ZlibCompressor(comptime WriterType: type) type {
     };
 }
 
-/// Makes a zlibcompressor from a writer
-pub fn zlibCompressor(alloc: std.mem.Allocator, underlying_stream: anytype) !ZlibCompressor(@TypeOf(underlying_stream)) {
-    var ret: ZlibCompressor(@TypeOf(underlying_stream)) = undefined;
-    ret.raw_writer = underlying_stream;
-    ret.adler32_writer = adler32.writer(ret.raw_writer);
-    ret.compressor = try defl.compressor(alloc, ret.adler32_writer.writer(), .{});
-    return ret;
-}
-
 test "zlib compressor" {
-    // TODO: safety on segfaults here
-    var gpa: std.heap.GeneralPurposeAllocator(.{ .safety = false }) = .{};
+    var gpa: std.heap.GeneralPurposeAllocator(.{}) = .{};
     const alloc = gpa.allocator();
 
     var list = std.ArrayList(u8).init(alloc);
-    defer list.deinit();
 
-    var zlib = try zlibCompressor(alloc, list.writer());
+    //var zlib = try zlibCompressor(alloc, list.writer());
+    var zlib: ZlibCompressor(@TypeOf(list.writer())) = undefined;
+    try zlib.init(alloc, list.writer());
 
     try zlib.begin();
     try zlib.writer().writeAll("\x63\xF8\xFF\xFF\x3F\x00");
@@ -68,6 +69,8 @@ test "zlib compressor" {
 
     // TODO: test zlib compressor
 
-    _ = gpa.deinit();
-    //try std.testing.expect(!leaks);
+    list.deinit();
+
+    const leaks = gpa.deinit();
+    try std.testing.expect(!leaks);
 }
