@@ -66,7 +66,7 @@ fn writeData(writer: anytype, alloc: std.mem.Allocator, img: Image) !void {
 
     // Zlib frame
     try zlib.begin();
-    try filter(img, .{ .Specified = .None }, zlib.writer());
+    try filter(img, .Heuristic, zlib.writer());
     try zlib.end();
 
     const size = @truncate(u32, buffer.items.len - 4);
@@ -113,15 +113,17 @@ fn filter(img: Image, filter_choice: FilterChoice, writer: anytype) !void {
     var prev_bytes: ?[]const u8 = null;
 
     while (y < img.height) : (y += 1) {
+        const bytes = std.mem.sliceAsBytes(img.pixels[(y * img.width)..((y + 1) * img.width)]);
+
         const filter_type: FilterType = switch (filter_choice) {
-            .TryAll,
-            .Heuristic => @panic("Unimplemeted (TODO)"), // TODO: filter choice heuristic
+            .TryAll => @panic("Unimplemented"),
+            .Heuristic => filterChoiceHeuristic(bytes, prev_bytes),
             .Specified => |f| f,
         };
 
         try writer.writeByte(@enumToInt(filter_type));
 
-        const bytes = std.mem.sliceAsBytes(img.pixels[(y * img.width)..((y + 1) * img.width)]);
+        
 
         // TODO: for other things than 32bpp
         switch (filter_type) {
@@ -167,6 +169,94 @@ fn filter(img: Image, filter_choice: FilterChoice, writer: anytype) !void {
 
         prev_bytes = bytes;
     }
+}
+
+fn filterChoiceHeuristic(scanline: []const u8, scanline_above: ?[]const u8) FilterType {
+    var max_score: usize = 0;
+    var best: FilterType = .None;
+    inline for ([_]FilterType{ .None, .Sub, .Up, .Average, .Paeth }) |filter_type| {
+        var prevb: u8 = 0;
+        var combo: usize = 0;
+        var score: usize = 0;
+        switch (filter_type) {
+            .None => {
+                for (scanline) |b| {
+                    if (b == prevb) {
+                        combo += 1;
+                    } else {
+                        score += combo * combo;
+                        combo = 0;
+                        prevb = b;
+                    }
+                }
+            },
+            .Sub => {
+                for (scanline) |pix, i| {
+                    const prev: u8 = if (i >= 4) scanline[i - 4] else 0;
+                    const diff: u8 = pix -% prev;
+
+                    if (diff == prevb) {
+                        combo += 1;
+                    } else {
+                        score += combo * combo;
+                        combo = 0;
+                        prevb = diff;
+                    }
+                }
+            },
+            .Up => {
+                for (scanline) |pix, i| {
+                    const above: u8 = if (scanline_above) |b| b[i] else 0;
+                    const diff: u8 = pix -% above;
+
+                    if (diff == prevb) {
+                        combo += 1;
+                    } else {
+                        score += combo * combo;
+                        combo = 0;
+                        prevb = diff;
+                    }
+                }
+            },
+            .Average => {
+                for (scanline) |pix, i| {
+                    const prev: u8 = if (i >= 4) scanline[i - 4] else 0;
+                    const above: u8 = if (scanline_above) |b| b[i] else 0;
+                    const avg: u8 = @truncate(u8, (@intCast(u9, prev) + above) / 2);
+                    const diff = pix -% avg;
+
+                    if (diff == prevb) {
+                        combo += 1;
+                    } else {
+                        score += combo * combo;
+                        combo = 0;
+                        prevb = diff;
+                    }
+                }
+            },
+            .Paeth => {
+                for (scanline) |pix, i| {
+                    const prev: u8 = if (i >= 4) scanline[i - 4] else 0;
+                    const above: u8 = if (scanline_above) |b| b[i] else 0;
+                    const prev_above = if (scanline_above) |b| (if (i >= 4) b[i - 4] else 0) else 0;
+                    const diff = pix -% paeth(prev, above, prev_above);
+
+                    if (diff == prevb) {
+                        combo += 1;
+                    } else {
+                        score += combo * combo;
+                        combo = 0;
+                        prevb = diff;
+                    }
+                }
+            }
+        }
+        if (score > max_score) {
+            max_score = score;
+            best = filter_type;
+        }
+    }
+    return best;
 }
 
 fn paeth(b4: u8, up: u8, b4_up: u8) u8 {
