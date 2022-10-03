@@ -35,8 +35,6 @@ pub fn main() !void {
     try buffered_writer.flush();
 
     std.debug.print("Wrote {} bytes, saved.\n", .{written});
-
-    // TODO: figure out why the file doesn't render in the browser
 }
 
 test {
