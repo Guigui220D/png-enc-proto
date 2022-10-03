@@ -41,8 +41,8 @@ pub fn ZlibCompressor(comptime WriterType: type) type {
         }
 
         /// Gets a writer for the compressor
-        pub fn writer(self: *Self) @TypeOf(self.compressor).Writer {
-            return self.compressor.writer();
+        pub fn writer(self: *Self) @TypeOf(self.adler32_writer).Writer {
+            return self.adler32_writer.writer();
         }
 
         /// Ends a zlib block with the checksum
@@ -70,7 +70,10 @@ test "zlib compressor" {
         const content = "hey abcdef aaaaaa abcdef";
 
         try comp.begin();
-        try comp.writer().writeAll(content);
+
+        var adler32_writer = adler32.writer(comp.writer());
+        var adl_wr = adler32_writer.writer();
+        try adl_wr.writeAll(content);
         try comp.end();
 
         var decomp = try std.compress.zlib.zlibStream(alloc, fifo.reader());
@@ -80,6 +83,9 @@ test "zlib compressor" {
 
         const size = try decomp.read(&out);
 
+        const checksum = try fifo.reader().readIntBig(u32);
+
+        try std.testing.expectEqual(adler32_writer.adler, checksum);
         try std.testing.expectEqualSlices(u8, content, out[0..size]);
     }
 
