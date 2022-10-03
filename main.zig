@@ -19,7 +19,7 @@ pub fn main() !void {
             p.* = 0xffffff00;
     }
 
-    img.setPixel(5, 7, 0xff00ff00) catch unreachable;
+    img.setPixel(3, 3, 0xff00ff00) catch unreachable;
 
     var cwd = std.fs.cwd();
     var file = try cwd.createFile("out.png", .{});

@@ -110,6 +110,8 @@ const FilterChoice = union(FilterChoiceStrategies) {
 
 fn filter(img: Image, filter_choice: FilterChoice, writer: anytype) !void {    
     var y: usize = 0;
+    var prev_bytes: ?[]const u8 = null;
+
     while (y < img.height) : (y += 1) {
         const filter_type: FilterType = switch (filter_choice) {
             .TryAll,
@@ -117,18 +119,68 @@ fn filter(img: Image, filter_choice: FilterChoice, writer: anytype) !void {
             .Specified => |f| f,
         };
 
-        try writer.writeIntBig(u8, @enumToInt(filter_type));
+        try writer.writeByte(@enumToInt(filter_type));
 
+        const bytes = std.mem.sliceAsBytes(img.pixels[(y * img.width)..((y + 1) * img.width)]);
+
+        // TODO: for other things than 32bpp
         switch (filter_type) {
             .None => {
                 // Just copy the line
-                try writer.writeAll(std.mem.sliceAsBytes(img.pixels[(y * img.width)..((y + 1) * img.width)]));
+                try writer.writeAll(bytes);
             },
-            .Sub,
-            .Up,
-            .Average,
-            .Paeth => @panic("Unimplemented (TODO)"), // TODO: filters
+            .Sub => {
+                // Substract each pixel with the previous one
+                for (bytes) |pix, i| {
+                    const prev: u8 = if (i >= 4) bytes[i - 4] else 0;
+                    const diff: u8 = pix -% prev;
+                    try writer.writeByte(diff);
+                }
+            },
+            .Up => {
+                // Substract each pixel from the one above
+                for (bytes) |pix, i| {
+                    const above: u8 = if (prev_bytes) |b| b[i] else 0;
+                    const diff: u8 = pix -% above;
+                    try writer.writeByte(diff);
+                }
+            },
+            .Average => {
+                for (bytes) |pix, i| {
+                    const prev: u8 = if (i >= 4) bytes[i - 4] else 0;
+                    const above: u8 = if (prev_bytes) |b| b[i] else 0;
+                    const avg: u8 = @truncate(u8, (@intCast(u9, prev) + above) / 2);
+                    const diff = pix -% avg;
+                    try writer.writeByte(diff);
+                }
+            },
+            .Paeth => {
+                for (bytes) |pix, i| {
+                    const prev: u8 = if (i >= 4) bytes[i - 4] else 0;
+                    const above: u8 = if (prev_bytes) |b| b[i] else 0;
+                    const prev_above = if (prev_bytes) |b| (if (i >= 4) b[i - 4] else 0) else 0;
+                    const diff = pix -% paeth(prev, above, prev_above);
+                    try writer.writeByte(diff);
+                }
+            }
         }
+
+        prev_bytes = bytes;
+    }
+}
+
+fn paeth(b4: u8, up: u8, b4_up: u8) u8 {
+    const p: i16 = @intCast(i16, b4) + up - b4_up;
+    const pa = std.math.absInt(p - b4) catch unreachable;
+    const pb = std.math.absInt(p - up) catch unreachable;
+    const pc = std.math.absInt(p - b4_up) catch unreachable;
+
+    if (pa <= pb and pa <= pc) {
+        return b4;
+    } else if (pb <= pc) {
+        return up;
+    } else {
+        return b4_up;
     }
 }
 
