@@ -7,11 +7,11 @@ pub fn main() !void {
     defer std.debug.assert(!gpa.deinit());
     const alloc = gpa.allocator();
     
-    var img = try Image.create(alloc, 655, 655);
+    var img = try Image.create(alloc, 1000, 1000);
     defer img.destroy(alloc);
 
     for (img.pixels) |*p, i| {
-        p.* = @truncate(u32, i) * 10000;
+        p.* = (@truncate(u32, i) * 1000) | 0xff000000;
     }
 
     img.setPixel(3, 3, 0xff00ff00) catch unreachable;

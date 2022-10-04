@@ -2,6 +2,7 @@ const std = @import("std");
 
 const Image = @import("Image.zig");
 const crc = @import("crc.zig");
+const idat = @import("idat_chunk_writer.zig");
 const ZlibCompressor = @import("zlib_compressor.zig").ZlibCompressor;
 
 // TODO: encoder options
@@ -48,29 +49,18 @@ fn writeHeader(writer: anytype, width: usize, height: usize) !void {
 
 /// Write the IDAT chunk
 fn writeData(writer: anytype, alloc: std.mem.Allocator, img: Image) !void {
-    // TODO: think about a chunking IDAT writer (kinda like BufferedWriter)
-    // TODO: fix this ugly writer stacking
-    var buffer = std.ArrayList(u8).init(alloc);
-    defer buffer.deinit();
+    var chunk_writer = idat.idatWriter(writer);
+    var chunk_wr = chunk_writer.writer();
 
-    var crc_writer = crc.writer(buffer.writer());
-    var crc_wr = crc_writer.writer();
-
-    try crc_wr.writeAll("IDAT");
-
-    var zlib: ZlibCompressor(@TypeOf(crc_wr)) = undefined;
-    try zlib.init(alloc, crc_wr);
+    var zlib: ZlibCompressor(@TypeOf(chunk_wr)) = undefined;
+    try zlib.init(alloc, chunk_wr);
 
     // Zlib frame
     try zlib.begin();
     try filter(img, .Heuristic, zlib.writer());
     try zlib.end();
 
-    const size = @truncate(u32, crc_writer.count - 4);
-
-    try writer.writeIntBig(u32, size);
-    try writer.writeAll(buffer.items);
-    try writer.writeIntBig(u32, crc_writer.getCrc());
+    try chunk_writer.flush();
 }
 
 /// Write the IEND chunk
