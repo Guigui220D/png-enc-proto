@@ -58,18 +58,15 @@ fn writeData(writer: anytype, alloc: std.mem.Allocator, img: Image) !void {
 
     try crc_wr.writeAll("IDAT");
 
-    var counting_writer = std.io.countingWriter(crc_wr);
-    var counting_wr = counting_writer.writer();
-
-    var zlib: ZlibCompressor(@TypeOf(counting_wr)) = undefined;
-    try zlib.init(alloc, counting_wr);
+    var zlib: ZlibCompressor(@TypeOf(crc_wr)) = undefined;
+    try zlib.init(alloc, crc_wr);
 
     // Zlib frame
     try zlib.begin();
     try filter(img, .Heuristic, zlib.writer());
     try zlib.end();
 
-    const size = @truncate(u32, buffer.items.len - 4);
+    const size = @truncate(u32, crc_writer.count - 4);
 
     try writer.writeIntBig(u32, size);
     try writer.writeAll(buffer.items);

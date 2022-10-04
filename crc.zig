@@ -29,6 +29,7 @@ pub fn CrcWriter(comptime WriterType: type) type {
     return struct {
         raw_writer: WriterType,
         crc: u32 = 0xffffffff,
+        count: u64 = 0,
 
         pub const Error = WriterType.Error;
         pub const Writer = io.Writer(*Self, Error, write);
@@ -48,11 +49,17 @@ pub fn CrcWriter(comptime WriterType: type) type {
                 const c = self.crc;
                 self.crc = crc_table.?[(c ^ b) & 0xff] ^ (c >> 8);
             }
+            self.count += amt;
+
             return amt;
         }
 
         pub fn getCrc(self: Self) u32 {
             return ~self.crc;
+        }
+
+        pub fn clearCrc(self: *Self) void {
+            self.crc = 0;
         }
     };
 }
