@@ -47,7 +47,7 @@ pub fn ZlibCompressor(comptime WriterType: type) type {
 
         /// Ends a zlib block with the checksum
         pub fn end(self: *Self) !void {
-            try self.compressor.flush();
+            try self.compressor.close();
             self.compressor.deinit();
             // Write the checksum
             var wr = self.raw_writer;
